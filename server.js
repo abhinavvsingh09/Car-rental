@@ -1,7 +1,7 @@
 const express = require('express');
 const app = express();
 
-// 1. JSON Body Parser with malformed JSON handler
+
 app.use(express.json());
 app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
@@ -10,24 +10,20 @@ app.use((err, req, res, next) => {
   next();
 });
 
-// Force JSON Content-Type header on all non-empty responses
+
 app.use((req, res, next) => {
   res.setHeader('Content-Type', 'application/json');
   next();
 });
 
-// In-memory storage
+
 let records = [];
 let nextId = 1;
 
-// Allowed Enum Values
+
 const VALID_ENUMS = ['SEDAN', 'SUV', 'TRUCK', 'COUPE', 'VAN', 'AVAILABLE', 'RENTED', 'MAINTENANCE'];
 
-/**
- * Normalizes input keys to support either standard car attributes
- * (make, model, dailyRate, seats, category, isAvailable, vin)
- * or generic harness names (text1, text2, amount, count, enum, flag, code).
- */
+
 function extractRecordFields(body) {
   return {
     text1: body.text1 !== undefined ? body.text1 : body.make,
@@ -40,19 +36,16 @@ function extractRecordFields(body) {
   };
 }
 
-/**
- * Validation logic matching test criteria
- */
+
 function validateRecord(data, isPatch = false, currentId = null) {
   const errors = [];
   const { text1, text2, amount, count, enumVal, flag, code } = extractRecordFields(data);
 
-  // If body is empty object
   if (!isPatch && Object.keys(data).length === 0) {
     return ['Request body cannot be empty.'];
   }
 
-  // text1: required string, min length 2
+  
   if (!isPatch || text1 !== undefined) {
     if (text1 === undefined || typeof text1 !== 'string') {
       errors.push('text1/make is required and must be a string.');
@@ -61,42 +54,42 @@ function validateRecord(data, isPatch = false, currentId = null) {
     }
   }
 
-  // text2: required string
+
   if (!isPatch || text2 !== undefined) {
     if (text2 === undefined || typeof text2 !== 'string' || text2.trim() === '') {
       errors.push('text2/model is required and must be a non-empty string.');
     }
   }
 
-  // amount: required number > 0
+  
   if (!isPatch || amount !== undefined) {
     if (typeof amount !== 'number' || isNaN(amount) || amount <= 0) {
       errors.push('amount/dailyRate is required and must be a number greater than 0.');
     }
   }
 
-  // count: numeric (integer >= 0)
+
   if (!isPatch || count !== undefined) {
     if (typeof count !== 'number' || !Number.isInteger(count) || count < 0) {
       errors.push('count/seats/year must be an integer >= 0.');
     }
   }
 
-  // enum: must match valid enum set
+  
   if (!isPatch || enumVal !== undefined) {
     if (typeof enumVal !== 'string' || !VALID_ENUMS.includes(enumVal.toUpperCase())) {
       errors.push(`enum/category must be one of: ${VALID_ENUMS.join(', ')}`);
     }
   }
 
-  // flag: boolean
+ 
   if (!isPatch || flag !== undefined) {
     if (typeof flag !== 'boolean') {
       errors.push('flag/isAvailable must be a boolean (true or false).');
     }
   }
 
-  // Uniqueness rule (checked against code / vin / text1+text2 if present)
+ 
   if (code !== undefined) {
     const duplicate = records.find(r => r.code === code && r.id !== currentId);
     if (duplicate) {
@@ -107,9 +100,7 @@ function validateRecord(data, isPatch = false, currentId = null) {
   return errors;
 }
 
-/**
- * ID validation helper: ensures ID is numeric
- */
+
 function parseValidId(idParam) {
   if (!/^\d+$/.test(idParam)) {
     return null;
@@ -117,14 +108,9 @@ function parseValidId(idParam) {
   return parseInt(idParam, 10);
 }
 
-// ==========================================
-// Router Setup: Mounts under both "/" and "/api/cars"
-// ==========================================
+
 const router = express.Router();
 
-/**
- * POST /
- */
 router.post('/', (req, res) => {
   const errors = validateRecord(req.body, false);
   if (errors.length > 0) {
@@ -146,15 +132,11 @@ router.post('/', (req, res) => {
 
   if (code) newRecord.code = code;
 
-  // Echo back all original submitted fields
   records.push(newRecord);
   return res.status(201).json(newRecord);
 });
 
-/**
- * GET /
- * Full pagination, sorting, filtering, and search
- */
+
 router.get('/', (req, res) => {
   let {
     page = '1',
@@ -208,7 +190,7 @@ router.get('/', (req, res) => {
 
   let result = [...records];
 
-  // 1. Filter: Enum
+
   const targetEnum = enumFilter || status || category;
   if (targetEnum) {
     result = result.filter(r => {
@@ -217,7 +199,7 @@ router.get('/', (req, res) => {
     });
   }
 
-  // 2. Filter: Boolean flag
+
   if (flag !== undefined) {
     if (flag !== 'true' && flag !== 'false') {
       return res.status(400).json({ error: 'flag filter must be "true" or "false"' });
@@ -226,7 +208,7 @@ router.get('/', (req, res) => {
     result = result.filter(r => (r.flag !== undefined ? r.flag === boolFlag : r.isAvailable === boolFlag));
   }
 
-  // 3. Filter: Amount range
+  
   if (minVal !== null) {
     result = result.filter(r => (r.amount !== undefined ? r.amount : r.dailyRate) >= minVal);
   }
@@ -234,7 +216,7 @@ router.get('/', (req, res) => {
     result = result.filter(r => (r.amount !== undefined ? r.amount : r.dailyRate) <= maxVal);
   }
 
-  // 4. Search: case-insensitive across text fields
+  
   if (search !== undefined) {
     const term = search.trim().toLowerCase();
     if (term.length > 0) {
@@ -246,7 +228,7 @@ router.get('/', (req, res) => {
     }
   }
 
-  // 5. Sort
+  
   if (sort) {
     const isDesc = order.toLowerCase() === 'desc';
     result.sort((a, b) => {
@@ -259,7 +241,7 @@ router.get('/', (req, res) => {
     });
   }
 
-  // Pagination calculation
+  
   const total = result.length;
   const totalPages = Math.ceil(total / limitNum) || 0;
   const startIndex = (pageNum - 1) * limitNum;
@@ -274,9 +256,7 @@ router.get('/', (req, res) => {
   });
 });
 
-/**
- * GET /:id
- */
+
 router.get('/:id', (req, res) => {
   const id = parseValidId(req.params.id);
   if (id === null) {
@@ -291,9 +271,7 @@ router.get('/:id', (req, res) => {
   return res.status(200).json(record);
 });
 
-/**
- * PUT /:id
- */
+
 router.put('/:id', (req, res) => {
   const id = parseValidId(req.params.id);
   if (id === null) {
@@ -329,9 +307,7 @@ router.put('/:id', (req, res) => {
   return res.status(200).json(updated);
 });
 
-/**
- * PATCH /:id
- */
+
 router.patch('/:id', (req, res) => {
   const id = parseValidId(req.params.id);
   if (id === null) {
@@ -350,7 +326,7 @@ router.patch('/:id', (req, res) => {
     }
   }
 
-  // Update provided fields, ignoring attempts to overwrite id
+  
   for (const [key, value] of Object.entries(req.body)) {
     if (key !== 'id') {
       record[key] = value;
